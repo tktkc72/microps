@@ -20,7 +20,6 @@ struct ip_hdr
     uint16_t sum;
     ip_addr_t src;
     ip_addr_t dst;
-    uint8_t options[0];
 };
 
 struct ip_protocol
@@ -183,13 +182,13 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     }
     hdr = (struct ip_hdr *)data;
 
-    v = (hdr->vhl & 0xf0) >> 4;
-    hl = hdr->vhl & 0x0f;
+    v = hdr->vhl >> 4;
     if (v != IP_VERSION_IPV4)
     {
         errorf("not ip4 %u", v);
         return;
     }
+    hl = (hdr->vhl & 0x0f) << 2;
     if (len < hl)
     {
         errorf("too short len: %u, hl: %u", len, hl);
@@ -203,7 +202,7 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
         return;
     }
 
-    if (cksum16((uint16_t *)data, len, 0) != 0)
+    if (cksum16((uint16_t *)hdr, hl, 0) != 0)
     {
         errorf("checksum error: sum=0x%04x, verify=0x%04x", ntoh16(hdr->sum), ntoh16(cksum16((uint16_t *)hdr, hl, -hdr->sum)));
         return;
@@ -235,7 +234,7 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     {
         if (hdr->protocol == proto->type)
         {
-            proto->handler(data, len, hdr->src, hdr->dst, iface);
+            proto->handler((uint8_t *)hdr + hl, len - hl, hdr->src, hdr->dst, iface);
             return;
         }
     }
